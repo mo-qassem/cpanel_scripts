@@ -1,0 +1,9 @@
+#!/bin/bash
+THRESHOLD=90
+USAGE=$(df /tmp | grep /tmp | awk '{ print $5 }' | sed 's/%//g')
+if [ "$USAGE" -ge "$THRESHOLD" ]; then
+	echo "Cleaning up /tmp directory as usage is at ${USAGE}%"
+	find /tmp -mindepth 1 -delete
+else
+	echo "/tmp directory usage is at ${USAGE}%, no need to clean up."
+fi
