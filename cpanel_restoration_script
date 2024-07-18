@@ -1,0 +1,40 @@
+#!/bin/bash
+
+# VARS
+REMOTE_SERVER="root@rb-bsd03.exaservers.com:/backup/thakaholding-cpanel"
+LOCAL_CP_MOVE_DIR="/home"
+LOG_FILE="/root/cpanel_restoration_script.log"
+
+# LOG
+log_message() {
+    echo "$(date +'%Y-%m-%d %H:%M:%S') - $1" >> $LOG_FILE
+}
+
+# Get a list of all cPanel accounts from the remote server
+REMOTE_ACCOUNTS=$(ssh -p 31262 root@rb-bsd03.exaservers.com "ls /backup/thakaholding-cpanel | grep 'cpmove-' | sed 's/cpmove-//' | sed 's/.tar.gz//'")
+
+for ACCOUNT in $REMOTE_ACCOUNTS; do
+    log_message "Processing account: $ACCOUNT"
+
+    rsync -avhPe 'ssh -p 31262' $REMOTE_SERVER/cpmove-$ACCOUNT.tar.gz $LOCAL_CP_MOVE_DIR
+    if [ $? -ne 0 ]; then
+        log_message "Failed to rsync cpmove file for account: $ACCOUNT from $REMOTE_SERVER"
+        continue
+    fi
+
+    /scripts/restorepkg $LOCAL_CP_MOVE_DIR/cpmove-$ACCOUNT.tar.gz
+    if [ $? -ne 0 ]; then
+        log_message "Failed to restore cpmove file for account: $ACCOUNT"
+        continue
+    fi
+
+    rm -f $LOCAL_CP_MOVE_DIR/cpmove-$ACCOUNT.tar.gz
+    if [ $? -ne 0 ]; then
+        log_message "Failed to delete cpmove file for account: $ACCOUNT"
+        continue
+    fi
+
+    log_message "Successfully processed account: $ACCOUNT"
+done
+
+log_message "Restore script complete"

@@ -1,0 +1,41 @@
+#!/bin/bash
+
+# VARS
+REMOTE_SERVER="root@rb-bsd03.exaservers.com:/backup/thakaholding-cpanel"
+LOCAL_CP_MOVE_DIR="/home"
+LOG_FILE="/root/cpanel_migration_script.log"
+
+# LOG 
+log_message() {
+    echo "$(date +'%Y-%m-%d %H:%M:%S') - $1" >> $LOG_FILE
+}
+
+# Get a list of all cPanel accounts
+ACCOUNTS=$(whmapi1 listaccts | grep user: | awk '{print $2}')
+
+for ACCOUNT in $ACCOUNTS; do
+    log_message "Processing account: $ACCOUNT"
+
+    /scripts/pkgacct $ACCOUNT
+    if [ $? -ne 0 ]; then
+        log_message "Failed to create cpmove file for account: $ACCOUNT"
+        continue
+    fi
+
+    rsync -avhPe 'ssh -p 31262' $LOCAL_CP_MOVE_DIR/cpmove-$ACCOUNT.tar.gz $REMOTE_SERVER
+    if [ $? -ne 0 ]; then
+        log_message "Failed to rsync cpmove file for account: $ACCOUNT to $REMOTE_SERVER"
+        continue
+    fi
+
+    rm -f $LOCAL_CP_MOVE_DIR/cpmove-$ACCOUNT.tar.gz
+    if [ $? -ne 0 ]; then
+        log_message "Failed to delete cpmove file for account: $ACCOUNT"
+        continue
+    fi
+
+    log_message "Successfully processed account: $ACCOUNT"
+done
+
+log_message "Backup script completed"
+
