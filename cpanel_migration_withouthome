@@ -1,0 +1,38 @@
+#!/bin/bash
+
+# VARS
+LOCAL_CP_MOVE_DIR="/home/cpmove"
+LOG_FILE="/root/cpanel_migration_script.log"
+BACKUP_DIR="/backup"
+
+mkdir -p $LOCAL_CP_MOVE_DIR
+
+# LOG 
+log_message() {
+    echo "$(date +'%Y-%m-%d %H:%M:%S') - $1" >> $LOG_FILE
+}
+
+# Get a list of all cPanel accounts
+ACCOUNTS=$(whmapi1 listaccts | grep user: | awk '{print $2}')
+
+for ACCOUNT in $ACCOUNTS; do
+    log_message "Processing account: $ACCOUNT"
+
+    /scripts/pkgacct --skiphomedir $ACCOUNT $LOCAL_CP_MOVE_DIR
+    if [ $? -ne 0 ]; then
+        log_message "Failed to create cpmove file for account: $ACCOUNT"
+        continue
+    fi
+
+    log_message "Successfully processed account: $ACCOUNT"
+done
+
+# Rsync the /home folder to /backup
+rsync -avh /home/ $BACKUP_DIR
+if [ $? -ne 0 ]; then
+    log_message "Failed to rsync /home to $BACKUP_DIR"
+else
+    log_message "Successfully rsynced /home to $BACKUP_DIR"
+fi
+
+log_message "Backup script completed"
