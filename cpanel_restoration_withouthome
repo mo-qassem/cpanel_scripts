@@ -1,0 +1,43 @@
+#!/bin/bash
+
+# VARS
+LOCAL_CP_MOVE_DIR="/backup/home/cpmove"
+LOG_FILE="/root/cpanel_restore.log"
+BACKUP_DIR="/backup/home"
+
+# LOG
+log_message() {
+    echo "$(date +'%Y-%m-%d %H:%M:%S') - $1" >> $LOG_FILE
+}
+
+# Check if the backup directory exists
+if [ ! -d $BACKUP_DIR ]; then
+    log_message "Backup directory $BACKUP_DIR does not exist. Exiting."
+    exit 1
+fi
+
+# Get a list of cpmove files
+CPMOVE_FILES=$(ls $LOCAL_CP_MOVE_DIR/cpmove-*.tar.gz)
+
+for CPMOVE_FILE in $CPMOVE_FILES; do
+    ACCOUNT=$(basename $CPMOVE_FILE | sed 's/cpmove-//; s/.tar.gz//')
+    log_message "Restoring account: $ACCOUNT"
+
+    /scripts/restorepkg $CPMOVE_FILE
+    if [ $? -ne 0 ]; then
+        log_message "Failed to restore cpmove file for account: $ACCOUNT"
+        continue
+    fi
+
+    log_message "Successfully restored account: $ACCOUNT"
+done
+
+# Rsync the /home folder from /backup
+rsync -avhP $BACKUP_DIR/ /home/
+if [ $? -ne 0 ]; then
+    log_message "Failed to rsync /home from $BACKUP_DIR"
+else
+    log_message "Successfully rsynced /home from $BACKUP_DIR"
+fi
+
+log_message "Restore script completed"

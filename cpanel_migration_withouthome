@@ -28,7 +28,7 @@ for ACCOUNT in $ACCOUNTS; do
 done
 
 # Rsync the /home folder to /backup
-rsync -avh /home/ $BACKUP_DIR
+rsync -avhP /home $BACKUP_DIR
 if [ $? -ne 0 ]; then
     log_message "Failed to rsync /home to $BACKUP_DIR"
 else
