@@ -1,0 +1,47 @@
+#!/bin/bash
+
+# Define log file
+log_file="/home/exabackup/backup_log_$(date +'%Y-%m-%d').log"
+
+# Log start of backup process
+echo "$(date): Starting system configuration backup." >> $log_file
+
+# Backup system configuration
+cd /home/exabackup/system/
+sudo rm -rf whm-config-backup-*
+if [ $? -eq 0 ]; then
+    echo "$(date): Old system configuration backups removed successfully." >> $log_file
+else
+    echo "$(date): Failed to remove old system configuration backups." >> $log_file
+fi
+
+sudo /usr/local/cpanel/bin/cpconftool --backup --modules=cpanel::easy::apache,cpanel::smtp::exim,cpanel::system::backups,cpanel::system::mysql,cpanel::system::whmconf,cpanel::ui::themes
+if [ $? -eq 0 ]; then
+    echo "$(date): System configuration backup completed successfully." >> $log_file
+else
+    echo "$(date): System configuration backup failed." >> $log_file
+fi
+
+mv /home/whm-config-backup-* /home/exabackup/system/
+if [ $? -eq 0 ]; then
+    echo "$(date): System configuration backup moved successfully." >> $log_file
+else
+    echo "$(date): Failed to move system configuration backup." >> $log_file
+fi
+
+# Log start of cPanel accounts backup
+echo "$(date): Starting cPanel accounts backup without homedir data." >> $log_file
+
+# Backup cPanel accounts without homedir data
+for backup in `\ls /var/cpanel/users/`; do
+    sudo /scripts/pkgacct --skiphomedir --skipbwdata --skiplogs $backup /home/exabackup/accounts/
+    if [ $? -eq 0 ]; then
+        echo "$(date): Backup for account $backup completed successfully." >> $log_file
+    else
+        echo "$(date): Backup for account $backup failed." >> $log_file
+    fi
+done
+
+# Log end of backup process
+echo "$(date): Backup process completed." >> $log_file
+

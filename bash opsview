@@ -1,0 +1,95 @@
+#!/bin/bash
+
+# Check if cPanel service is installed
+systemctl is-active cpanel
+cpanel_status=$?
+
+# Check if 'CSF' service is installed
+systemctl is-active csf
+csf_status=$?
+
+# Download and install CSF if cPanel is installed and CSF is not installed
+if [ $cpanel_status -eq 0 ] && [ $csf_status -ne 0 ]; then
+  wget -O /tmp/csf.tgz "https://download.configserver.com/csf.tgz"
+  tar -xzf /tmp/csf.tgz -C /tmp/
+  cd /tmp/csf
+  bash install.sh
+fi
+
+# Install Opsview dependencies
+apt-get update
+apt-get install -y wget vnstat
+
+# Check if Opsview agent is already downloaded
+if [ ! -f /root/opsview-agent_6.8.0.202212070943-1focal1_amd64.deb ]; then
+  wget -O /root/opsview-agent_6.8.0.202212070943-1focal1_amd64.deb \
+    "https://opsview-repository.s3-eu-west-1.amazonaws.com/opsview-agents/ubuntu20/opsview-agent_6.8.0.202212070943-1focal1_amd64.deb"
+fi
+
+# Install Opsview DEB package
+if [ ! -d /opt/opsview/agent ]; then
+  dpkg -i /root/opsview-agent_6.8.0.202212070943-1focal1_amd64.deb
+fi
+
+# Start Opsview Agent service
+systemctl enable opsview-agent
+systemctl start opsview-agent
+
+# Add Opsview IP address to csf.allow
+csf -a 94.75.230.111 opsview-server
+
+# Add Bareos IP address to csf.allow
+csf -a 212.83.154.138 bareos-backup-service
+
+# Update CSF configuration to disable TESTING mode
+sed -i 's/^TESTING = "1"/TESTING = "0"/' /etc/csf/csf.conf
+
+# Update CSF allowed ports configuration
+sed -i 's/^TCP_IN = .*/TCP_IN = "20,21,22,25,26,53,80,110,143,443,465,587,993,3260,995,2077,2078,2079,2080,2082,2083,2086,2087,2095,2096,8443,2662,31262,5666,54741,52460,9101,9102,9103,49152:65534"/' /etc/csf/csf.conf
+
+# Restart CSF service
+csf -r
+
+# Add special permissions to sudoers file
+cat <<EOL >> /etc/sudoers
+opsview ALL=NOPASSWD:/usr/sbin/csf
+opsview ALL=NOPASSWD:/usr/sbin/exim
+opsview ALL=NOPASSWD:/usr/sbin/lfd
+opsview ALL=NOPASSWD:/usr/bin/omreport
+opsview ALL=NOPASSWD:/opt/opsview/agent/plugins/check_tcp
+opsview ALL=NOPASSWD:/opt/opsview/agent/plugins/check_disk
+EOL
+
+# Copy the NRPE configuration file
+cp ../../../nrpe.cfg /opt/opsview/agent/etc/nrpe.cfg
+
+# Copy the check_bandwidth_quota file
+cp ../../../plugins/check_bandwidth_quota.sh /opt/opsview/agent/plugins
+chown :opsview /opt/opsview/agent/plugins/check_bandwidth_quota.sh
+chmod 0750 /opt/opsview/agent/plugins/check_bandwidth_quota.sh
+
+# Copy the check_csf file
+cp ../../../plugins/check_csf /opt/opsview/agent/plugins
+chown :opsview /opt/opsview/agent/plugins/check_csf
+chmod 0750 /opt/opsview/agent/plugins/check_csf
+
+# Copy the check_eximmailqueue file
+cp ../../../plugins/check_eximmailqueue /opt/opsview/agent/plugins
+chown :opsview /opt/opsview/agent/plugins/check_eximmailqueue
+chmod 0750 /opt/opsview/agent/plugins/check_eximmailqueue
+
+# Copy the check_dhcp file
+cp ../../../plugins/check_dhcp /opt/opsview/agent/plugins
+chown :opsview /opt/opsview/agent/plugins/check_dhcp
+chmod 0750 /opt/opsview/agent/plugins/check_dhcp
+
+# Copy the check_raid file
+cp ../../../plugins/check_raid.pl /opt/opsview/agent/plugins
+chown :opsview /opt/opsview/agent/plugins/check_raid.pl
+chmod 0750 /opt/opsview/agent/plugins/check_raid.pl
+
+# Ensure the vnstat service is restarted
+systemctl restart vnstat
+
+# Ensure the opsview service is restarted
+systemctl restart opsview-agent

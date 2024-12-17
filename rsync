@@ -1,0 +1,51 @@
+#!/bin/bash
+
+# Define log file
+log_file="/var/log/shared_boxes_backup_$(date +'%Y-%m-%d').log"
+
+# Log the start time of the script
+start_time=$(date)
+echo "[$start_time]: Syncing shared boxes backup script started on ($HOSTNAME)." | tee -a $log_file
+
+# Send notification email about the start of the backup
+{ 
+    echo "Syncing shared boxes backup script started on ($HOSTNAME) at $start_time. I will inform you when all processes are finished." | awk '1;{print "\n"}' 
+} | mailx -s "Start syncing of shared boxes backup at ($HOSTNAME)" monitoring@exa.sa
+
+# Function to perform backup for a specific box
+backup_box() {
+    local box_name=$1
+    local remote_host=$2
+
+    echo "[$(date)]: Starting backup for $box_name." | tee -a $log_file
+    
+    ssh -p 31262 root@$remote_host "/home/exabackup/backup-script"
+    if [ $? -eq 0 ]; then
+        echo "[$(date)]: Remote backup script executed successfully on $remote_host." | tee -a $log_file
+    else
+        echo "[$(date)]: Failed to execute remote backup script on $remote_host." | tee -a $log_file
+    fi
+
+    rsync -ogpvhraiP -e "ssh -p 31262" root@$remote_host:/home /backup/shared-boxes-backup/$box_name/
+    if [ $? -eq 0 ]; then
+        echo "[$(date)]: Rsync for $box_name completed successfully." | tee -a $log_file
+    else
+        echo "[$(date)]: Rsync for $box_name failed." | tee -a $log_file
+    fi
+}
+
+# Perform backup for each box
+backup_box "box109" "box109.exaservers.com"
+backup_box "box110" "box110.exaservers.com"
+backup_box "box113" "box113.exaservers.com"
+backup_box "box114" "box114.exaservers.com"
+backup_box "box115" "box115.exaservers.com"
+backup_box "box116" "box116.exaservers.com"
+backup_box "box117-ksa" "box117-ksa.exaservers.com"
+backup_box "box-whmcs" "my.exahost.com"
+
+# Calculate backup size and log it
+echo "[$(date)]: Calculating backup sizes." | tee -a $log_file
+backup_sizes=$(du -sch /backup/shared-boxes-backup/box*/* | sort -h | awk 'NF{$0=++a " :" $0};1')
+echo "$backup
+

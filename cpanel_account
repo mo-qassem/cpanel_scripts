@@ -1,0 +1,49 @@
+#!/bin/bash
+
+# VARS
+REMOTE_SERVER="root@box118.exaservers.com:/backup/box110-cpmove-files/qassem"
+LOCAL_CP_MOVE_DIR="/home"
+LOG_FILE="/root/account/pkg_create_qassem.log"
+ACCOUNTS_FILE="/root/account/qassem/qassem_part_"  # Specify the account file here
+
+# LOG 
+log_message() {
+    echo "$(date +'%Y-%m-%d %H:%M:%S') - $1" >> $LOG_FILE
+}
+
+# Check if the specified file exists
+if [ ! -f "$ACCOUNTS_FILE" ]; then
+    log_message "File $ACCOUNTS_FILE does not exist. Exiting."
+    echo "Error: File $ACCOUNTS_FILE does not exist. Exiting."
+    exit 1
+fi
+
+log_message "Processing accounts file: $ACCOUNTS_FILE"
+
+# Read accounts from the specified file
+while read -r ACCOUNT; do
+    log_message "Processing account: $ACCOUNT"
+
+    /scripts/pkgacct $ACCOUNT
+    if [ $? -ne 0 ]; then
+        log_message "Failed to create cpmove file for account: $ACCOUNT"
+        continue
+    fi
+
+    rsync -avhPe 'ssh -p 31262' $LOCAL_CP_MOVE_DIR/cpmove-$ACCOUNT.tar.gz $REMOTE_SERVER
+    if [ $? -ne 0 ]; then
+        log_message "Failed to rsync cpmove file for account: $ACCOUNT to $REMOTE_SERVER"
+        continue
+    fi
+
+    rm -f $LOCAL_CP_MOVE_DIR/cpmove-$ACCOUNT.tar.gz
+    if [ $? -ne 0 ]; then
+        log_message "Failed to delete cpmove file for account: $ACCOUNT"
+        continue
+    fi
+
+    log_message "Successfully processed account: $ACCOUNT"
+done < "$ACCOUNTS_FILE"
+
+log_message "Completed processing accounts file: $ACCOUNTS_FILE"
+log_message "Backup script completed"
