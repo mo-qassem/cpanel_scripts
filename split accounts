@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# Run the command to get the list of accounts
+accounts=$(whmapi1 listaccts | grep user: | awk '{print $2}')
+
+# Initialize variables
+count=0
+file_index=1
+output_file="accounts_group_$file_index.txt"
+
+# Create or clear the first file
+> "$output_file"
+
+# Process each account
+for account in $accounts; do
+    echo "$account" >> "$output_file"
+    ((count++))
+
+    # If 5 accounts are written, start a new file
+    if (( count % 5 == 0 )); then
+        ((file_index++))
+        output_file="accounts_group_$file_index.txt"
+        > "$output_file"
+    fi
+done
+
+echo "Accounts have been split into files: accounts_group_*.txt"

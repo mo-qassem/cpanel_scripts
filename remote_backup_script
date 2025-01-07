@@ -1,0 +1,43 @@
+#!/bin/bash
+# Set the S3 bucket and region
+s3_bucket="linux-shared-boxes-backup-2024"
+region="us-east-1"
+
+# Set the backup directory
+backup_dir="/backup/amazon"
+
+# Create the backup directory if it does not exist
+if [ ! -d "$backup_dir" ]; then
+  mkdir -p "$backup_dir"
+fi
+
+# Create a file to store the names of failed accounts
+failed_accounts_file="$backup_dir/box117-ksa-users"
+
+# Get a list of all cPanel accounts on the server
+accounts=$(whmapi1 listaccts | grep "user" | cut -d':' -f2 | tr -d ' ')
+
+# Loop through each account and create a backup
+for account in $accounts; do
+  # Create the backup
+  /scripts/pkgacct "$account" "$backup_dir/"
+ mv "$backup_dir/cpmove-$account.tar.gz"  "$backup_dir/$account.tar.gz"
+
+  # Check if the backup was created successfully
+  if [ $? -eq 0 ]; then
+    # Upload the backup to S3
+    aws s3 cp "$backup_dir/$account.tar.gz" "s3://$s3_bucket/box117-ksa/$account.tar.gz" --region "$region"
+
+    # Check if the upload was successful
+    if [ $? -eq 0 ]; then
+      # Remove the backup file from the server
+      rm "$backup_dir/$account.tar.gz"
+    else
+      # Record the failed account in the failed accounts file
+      echo "$account" >> "$failed_accounts_file"
+    fi
+  else
+    # Record the failed account in the failed accounts file
+    echo "$account" >> "$failed_accounts_file"
+  fi
+done
